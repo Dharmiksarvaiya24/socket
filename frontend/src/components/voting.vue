@@ -39,53 +39,45 @@
         </div>
 
         <!-- Users Section -->
-          <div class="card">
-         <h3>Connected Users</h3>
-         <ul class="user-list">
-          <li 
-             v-for="(user, index) in connectedUsers" 
-             :key="index"
+        <div class="card">
+          <h3>Connected Users</h3>
+          <ul class="user-list">
+            <li 
+              v-for="(user, index) in connectedUsers" 
+              :key="index"
             >
-           👤 {{ user }} <span v-if="user === username">(You)</span>
-         </li>
-       </ul>
-      </div>
+              👤 {{ user }} <span v-if="user === username">(You)</span>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
 
-    
-    <!-- Loading State -->
-    <div v-else class="loading">
-      <div class="spinner"></div>
-      <p>Connecting...</p>
-    </div>
+    <!-- Chat Button -->
+    <button class="chat-toggle" @click="toggleChat">
+      Chat 💬 
+    </button>
+    <transition name="slide-up">
+      <div v-if="chatVisible" class="chat-panel">
+        <h3>Live Chat</h3>
+        <div class="chat-box" ref="chatBox">
+          <div v-for="(msg, index) in chatMessages" :key="index">
+            {{ msg }}
+          </div>
+        </div>
+        <input 
+          v-model="chatInput" 
+          @keyup.enter="sendMessage" 
+          placeholder="Type your message..."
+          class="chat-input"
+        />
+      </div>
+    </transition>
   </div>
-
-  <!--  Button -->
-<button class="chat-toggle" @click="toggleChat">
-  Chat 💬 
-</button>
-<transition name="slide-up">
-  <div v-if="chatVisible" class="chat-panel">
-    <h3>Live Chat</h3>
-    <div class="chat-box">
-      <div v-for="(msg, index) in chatMessages" :key="index">
-        {{ msg }}
-      </div>
-    </div>
-    <input 
-      v-model="chatInput" 
-      @keyup.enter="sendMessage" 
-      placeholder="Type your message..."
-      class="chat-input"
-    />
-  </div>
-</transition>
-
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import socket from '../socket.js'
 
@@ -97,6 +89,7 @@ const chatInput = ref('')
 const votes = ref([])
 const myVote = ref(null)
 const chatVisible = ref(false)
+const chatBox = ref(null)
 
 // ✅ Computed average vote
 const averageVote = computed(() => {
@@ -105,8 +98,21 @@ const averageVote = computed(() => {
   return (sum / votes.value.length).toFixed(2)
 })
 
+// Auto-scroll chat to bottom
+const scrollChatToBottom = async () => {
+  if (chatBox.value) {
+    await nextTick()
+    chatBox.value.scrollTop = chatBox.value.scrollHeight
+  }
+}
+
 // ✅ Lifecycle: When component mounts
 onMounted(() => {
+  // Check if socket is connected first
+  if (!socket.connected) {
+    socket.connect()
+  }
+
   socket.emit('request-username') // Ask for username from server
 
   // ✅ Receive username from server
@@ -122,18 +128,35 @@ onMounted(() => {
 
   // ✅ Update user list
   socket.on('update-users', (userList) => {
-    connectedUsers.value = userList
-    console.log('✅ Updated user list:', userList)
+    if (Array.isArray(userList)) {
+      connectedUsers.value = userList
+      console.log('✅ Updated user list:', userList)
+    }
   })
 
   // ✅ Update vote list
   socket.on('vote-update', (updatedVotes) => {
-    votes.value = updatedVotes
+    if (Array.isArray(updatedVotes)) {
+      votes.value = updatedVotes
+    }
   })
 
   // ✅ Chat messages
   socket.on('chat-message', (message) => {
-    chatMessages.value.push(message)
+    if (message) {
+      chatMessages.value.push(message)
+      scrollChatToBottom()
+    }
+  })
+
+  // Handle connection errors
+  socket.on('connect_error', () => {
+    console.error('Socket connection failed')
+    // Could redirect to home or show error message
+  })
+
+  socket.on('disconnect', () => {
+    console.log('Socket disconnected')
   })
 })
 
@@ -143,17 +166,21 @@ onUnmounted(() => {
   socket.off('update-users')
   socket.off('vote-update')
   socket.off('chat-message')
+  socket.off('connect_error')
+  socket.off('disconnect')
 })
 
 // ✅ Emit vote
 function castVote(value) {
-  myVote.value = value
-  socket.emit('cast-vote', value)
+  if (value && value >= 1 && value <= 6) {
+    myVote.value = value
+    socket.emit('cast-vote', value)
+  }
 }
 
 // ✅ Send chat message
 function sendMessage() {
-  if (chatInput.value.trim()) {
+  if (chatInput.value && chatInput.value.trim()) {
     socket.emit('chat-message', chatInput.value.trim())
     chatInput.value = ''
   }
@@ -162,31 +189,30 @@ function sendMessage() {
 // ✅ Toggle chat box visibility
 function toggleChat() {
   chatVisible.value = !chatVisible.value
+  if (chatVisible.value) {
+    scrollChatToBottom()
+  }
 }
 </script>
-
-
-
-
-
 
 <style scoped>
 .app {
   min-height: 100vh;
-   background-color: #F5F5F5;
+  background-color: #F5F5F5;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .container {
-  max-width: 50%;
+  max-width: 800px;
   margin: 0 auto;
+  padding: 10px;
 }
 
 h1 {
   text-align: center;
   color: #2d3748;
-  font-size: 2.5rem;
+  font-size: 2.2rem;
   margin-bottom: 10px;
   font-weight: 700;
 }
@@ -194,14 +220,15 @@ h1 {
 .welcome {
   text-align: center;
   color: #4a5568;
-  font-size: 1.2rem;
-  margin-bottom: 15%;
+  font-size: 1.1rem;
+  margin-bottom: 10%;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-  gap: 50px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 80px;
+  justify-items: center;
 }
 
 .card {
@@ -210,30 +237,32 @@ h1 {
   padding: 24px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
   border: 1px solid #e2e8f0;
+  width: 100%;
+  max-width: 500px;
+  margin-bottom: 20px;
 }
 
 .card h3 {
-  margin: 0 0 20px 0;
+  margin-bottom: 15px;
   color: #2d3748;
-  font-size: 1.3rem;
+  font-size: 1.2rem;
   font-weight: 600;
 }
 
-/* Voting Styles */
 .vote-buttons {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 30px;
+  margin-bottom: 15px;
 }
 
 .vote-btn {
   background: #48bb78;
   color: white;
   border: none;
-  border-radius: 8px;
-  padding: 16px;
-  font-size: 18px;
+  border-radius: 9px;
+  padding: 15px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -241,7 +270,6 @@ h1 {
 
 .vote-btn:hover {
   background: #38a169;
-  
 }
 
 .vote-btn.active {
@@ -249,31 +277,19 @@ h1 {
   box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.3);
 }
 
-.vote-status {
-  background: #f0fff4;
-  color: #2f855a;
-  padding: 12px;
-  border-radius: 8px;
-  font-weight: 600;
-  margin-bottom: 15px;
-  border: 1px solid #c6f6d5;
-}
-
 .average {
   background: #edf2f7;
-  padding: 15px;
+  padding: 12px;
   border-radius: 8px;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #2d3748;
+  text-align: center;
   margin-bottom: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .votes-list h4 {
-  margin: 0 0 12px 0;
+  margin-bottom: 10px;
   color: #4a5568;
   font-size: 1rem;
 }
@@ -284,6 +300,7 @@ h1 {
   background: #f7fafc;
   border-radius: 6px;
   color: #4a5568;
+  font-size: 0.95rem;
 }
 
 .vote-item.my-vote {
@@ -306,61 +323,11 @@ h1 {
   border-radius: 6px;
   color: #2d3748;
   font-weight: 500;
-  transition: background 0.3s ease;
+  font-size: 0.95rem;
+  word-break: break-word;
 }
 
-.user-list li.you {
-  background: #ebf8ff;
-  color: #2b6cb0;
-  font-weight: 700;
-  border: 1px solid #bee3f8;
-}
-
-
-
-/* Loading Styles */
-.loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  color: #4a5568;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #e2e8f0;
-  border-top: 4px solid #48bb78;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 20px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .app {
-    padding: 10px;
-  }
-  
-  h1 {
-    font-size: 2rem;
-  }
-  
-  .card {
-    padding: 20px;
-  }
-}
+/* Chat toggle button */
 .chat-toggle {
   position: fixed;
   bottom: 20px;
@@ -370,23 +337,25 @@ h1 {
   border: none;
   border-radius: 50px;
   padding: 12px 18px;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: bold;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
   z-index: 1000;
 }
 
+/* Chat panel */
 .chat-panel {
   position: fixed;
   bottom: 70px;
   right: 20px;
-  width: 300px;
-  max-height: 400px;
+  width: 90vw;
+  max-width: 320px;
+  max-height: 80vh;
   background: white;
   border: 1px solid #cbd5e0;
   border-radius: 12px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
   padding: 15px;
   z-index: 999;
   display: flex;
@@ -395,7 +364,7 @@ h1 {
 
 .chat-panel h3 {
   margin: 0 0 10px;
-  font-size: 1.1rem;
+  font-size: 1rem;
   color: #2d3748;
 }
 
@@ -405,9 +374,10 @@ h1 {
   background: #f7fafc;
   padding: 10px;
   border-radius: 8px;
-  margin-bottom: 1px;
-  font-size: 0.95rem;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
   color: #4a5568;
+  max-height: 200px;
 }
 
 .chat-input {
@@ -416,7 +386,10 @@ h1 {
   border-radius: 8px;
   font-size: 14px;
   outline: none;
+  width: 90%;
 }
+
+/* Chat transition animation */
 .slide-up-enter-active,
 .slide-up-leave-active {
   transition: all 0.3s ease;
@@ -427,4 +400,47 @@ h1 {
   transform: translateY(100%);
 }
 
+/* Media Queries for Responsive Layout */
+@media (max-width: 768px) {
+  .container {
+    max-width: 100%;
+    padding: 0 10px;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+  }
+
+  .welcome {
+    font-size: 1rem;
+    margin-bottom: 20px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .card {
+    width: 95%;
+    padding: 20px;
+    max-width: 500px;
+  }
+
+  .vote-btn {
+    padding: 12px;
+    font-size: 20px;
+  }
+
+  .chat-toggle {
+    font-size: 14px;
+    padding: 10px 14px;
+  }
+
+  .chat-panel {
+    right: 10px;
+    width: 95vw;
+    max-width: none;
+  }
+}
 </style>
