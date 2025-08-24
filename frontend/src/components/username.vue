@@ -95,7 +95,7 @@ onMounted(() => {
   // Fallback: if something breaks, remove loading after 5s
   loadingTimeout = setTimeout(() => {
     loading.value = false
-  }, 5000)
+  }, 10000)
 })
 
 onUnmounted(() => {

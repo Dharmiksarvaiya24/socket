@@ -8,7 +8,7 @@
 
         <!-- Voting Section -->
         <div class="card">
-          <h3>Select Your number </h3>
+          <h3>Select Your Number</h3>
           <div class="vote-buttons">
             <button 
               v-for="num in 6" 
@@ -29,11 +29,13 @@
             <h4>Votes:</h4>
             <div 
               v-for="(vote, index) in votes" 
-              :key="index"
+              :key="index" 
               class="vote-item"
               :class="{ 'my-vote': vote.username === username }"
             >
-              {{ vote.username }}: {{ vote.vote }}
+              {{ vote.username }}: 
+              <span v-if="vote.username === username">{{ vote.vote }}</span>
+              <span v-else>voted</span>
             </div>
           </div>
         </div>
@@ -55,7 +57,7 @@
 
     <!-- Chat Button -->
     <button class="chat-toggle" @click="toggleChat">
-      Chat 💬 
+      💬 
     </button>
     <transition name="slide-up">
       <div v-if="chatVisible" class="chat-panel">
@@ -91,7 +93,7 @@ const myVote = ref(null)
 const chatVisible = ref(false)
 const chatBox = ref(null)
 
-// ✅ Computed average vote
+//  Computed average vote
 const averageVote = computed(() => {
   if (votes.value.length === 0) return '0.00'
   const sum = votes.value.reduce((acc, cur) => acc + cur.vote, 0)
@@ -106,7 +108,7 @@ const scrollChatToBottom = async () => {
   }
 }
 
-// ✅ Lifecycle: When component mounts
+//  Lifecycle: When component mounts
 onMounted(() => {
   // Check if socket is connected first
   if (!socket.connected) {
@@ -115,33 +117,33 @@ onMounted(() => {
 
   socket.emit('request-username') // Ask for username from server
 
-  // ✅ Receive username from server
+  //  Receive username from server
   socket.on('send-username', (name) => {
     if (!name || name.trim() === '') {
       router.push('/')
     } else {
       username.value = name
-      // ✅ Send it back to server (ensures user is registered)
+      //  Send it back to server (ensures user is registered)
       socket.emit('username', name)
     }
   })
 
-  // ✅ Update user list
+  // Update user list
   socket.on('update-users', (userList) => {
     if (Array.isArray(userList)) {
       connectedUsers.value = userList
-      console.log('✅ Updated user list:', userList)
+      console.log(' Updated user list:', userList)
     }
   })
 
-  // ✅ Update vote list
+  // Update vote list
   socket.on('vote-update', (updatedVotes) => {
     if (Array.isArray(updatedVotes)) {
       votes.value = updatedVotes
     }
   })
 
-  // ✅ Chat messages
+  // Chat messages
   socket.on('chat-message', (message) => {
     if (message) {
       chatMessages.value.push(message)
@@ -160,7 +162,7 @@ onMounted(() => {
   })
 })
 
-// ✅ Cleanup listeners
+// Cleanup listeners
 onUnmounted(() => {
   socket.off('send-username')
   socket.off('update-users')
@@ -170,7 +172,7 @@ onUnmounted(() => {
   socket.off('disconnect')
 })
 
-// ✅ Emit vote
+//  Emit vote
 function castVote(value) {
   if (value && value >= 1 && value <= 6) {
     myVote.value = value
@@ -178,7 +180,7 @@ function castVote(value) {
   }
 }
 
-// ✅ Send chat message
+//  Send chat message
 function sendMessage() {
   if (chatInput.value && chatInput.value.trim()) {
     socket.emit('chat-message', chatInput.value.trim())
@@ -186,7 +188,7 @@ function sendMessage() {
   }
 }
 
-// ✅ Toggle chat box visibility
+// Toggle chat box visibility
 function toggleChat() {
   chatVisible.value = !chatVisible.value
   if (chatVisible.value) {
@@ -194,7 +196,6 @@ function toggleChat() {
   }
 }
 </script>
-
 <style scoped>
 .app {
   min-height: 100vh;
